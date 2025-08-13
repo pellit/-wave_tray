@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+
+    <head>
+        <meta charset="utf8">
+        <title>WebGL Water</title>
+        <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+        <script src="OES_texture_float_linear-polyfill.js"></script>
+        <script src="lightgl.js"></script>
+        <script src="cubemap.js"></script>
+        <script src="renderer.js"></script>
+        <script src="water.js"></script>
+        <script src="hand-control.js"></script>
+        <script src="main.js"></script>
+        <style type="text/css">
+            body {
+                font: 13px/140% Arial, sans-serif;
+                background: black;
+                color: white;
+                /*overflow: hidden;*/
+            }
+
+            a {
+                color: inherit;
+                cursor: pointer;
+            }
+
+            img {
+                display: none;
+            }
+
+            ul {
+                padding: 0 0 0 20px;
+            }
+
+            h1 {
+                font: bold italic 30px/30px Georgia;
+                text-align: center;
+            }
+
+            h2 {
+                font: bold italic 17px/17px Georgia;
+                padding-top: 10px;
+            }
+
+            small {
+                display: block;
+                font-size: 11px;
+                line-height: 15px;
+            }
+
+            canvas {
+                position: absolute;
+                top: 0;
+                left: 0;
+            }
+
+            #help {
+                position: absolute;
+                top: 0;
+                right: 0;
+                bottom: 0;
+                width: 280px;
+                padding-right: 20px;
+                overflow: auto;
+            }
+
+            #loading {
+                position: absolute;
+                left: 0;
+                top: 50%;
+                right: 300px;
+                text-align: center;
+                margin-top: -8px;
+            }
+
+            @media (max-width: 600px) {
+                small {
+                    font-size: 8px;
+                    line-height: 10px;
+                }
+
+                #help {
+                    width: 100px;
+                    font-size: 10px;
+                    line-height: 12px;
+                }
+            }
+        </style>
+    </head>
+
+    <body>
+        <div id="loading">Loading...</div>
+
+        <div id="help">
+            <h2>Interacciones:</h2>
+            <ul>
+                <li>Dibuja sobre el agua para hacer ondas</li>
+                <li>Arrastra el fondo para rotar la cámara</li>
+                <li>Presiona ESPACIO para pausar/reanudar</li>
+                <li>Arrastra la esfera para moverla</li>
+                <li>Presiona L para cambiar la dirección de la luz</li>
+                <li>Presiona G para activar/desactivar la gravedad</li>
+                <li><b>Control de manos (modo libre):</b>
+                    <ul style="font-size:11px;margin-top:5px;">
+                        <li>🤏 Cierra la mano para agarrar la pelota</li>
+                        <li>✋ Abre la mano para soltar la pelota</li>
+                        <li>↔️ Mueve la mano horizontal = posición lateral</li>
+                        <li>⬆️⬇️ Mueve la mano vertical = <b>amplitud</b> (como osciladores)</li>
+                        <li>🤏➡️ Acerca/aleja la mano = <b>intensidad</b> del movimiento</li>
+                        <li>📊 Similar a controles de amplitud en otros modos</li>
+                    </ul>
+                </li>
+                <li>
+                    <div id="controls"
+                        style="top:0;left:0;padding:10px;z-index:1000;background:rgba(0,0,0,0.5);color:white;">
+                        <label for="modeSelect"><b>Modo de simulación:</b></label>
+                        <select id="modeSelect">
+                            <option value="">Seleccionar...</option>
+                            <option value="libre">Libre (interactivo)</option>
+                            <option value="oscilador1">Oscilador: 1 esfera</option>
+                            <option value="oscilador2">Oscilador: 2 esferas</option>
+                            <option value="rectangulo">Oscilador: Rectángulo</option>
+                        </select>
+                        <div id="paramControls" style="margin-top:10px;"></div>
+
+                        <div style="margin-top:15px;border-top:1px solid #444;padding-top:10px;">
+                            <b>Parámetros Físicos:</b><br>
+                            <label style="margin-top:5px;display:block;">Velocidad ondas:
+                                <input type="range" id="waveSpeedSlider" min="0.1" max="2.0" step="0.1" value="2.0"
+                                    style="width:100px;">
+                                <span id="waveSpeedValue">2.0</span>
+                            </label>
+                            <label style="margin-top:5px;display:block;">Amortiguación:
+                                <input type="range" id="dampingSlider" min="0.900" max="0.999" step="0.001"
+                                    value="0.995" style="width:100px;">
+                                <span id="dampingValue">0.995</span>
+                            </label>
+                        </div>
+
+                        <label style="margin-top:10px;display:block;"><input type="checkbox" id="wallsCheckbox">
+                            Disipar energía en paredes</label>
+                        <label style="margin-top:5px;display:block;"><input type="checkbox" id="showWallsCheckbox"
+                                checked>
+                            Mostrar paredes (océano sin límites si está desmarcado)</label>
+
+                        <!-- Control de manos -->
+                        <div id="handControlSection"
+                            style="margin-top:15px;border-top:1px solid #444;padding-top:10px;display:none;">
+                            <b>Control de Manos (MediaPipe):</b><br>
+                            <button id="btnInitHands"
+                                style="margin-top:5px;padding:5px 10px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;">
+                                Inicializar Cámara
+                            </button>
+                            <button id="btnToggleHands"
+                                style="margin-top:5px;padding:5px 10px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;display:none;">
+                                Activar Control
+                            </button>
+                            <button id="btnDebugHands"
+                                style="margin-top:5px;padding:5px 10px;background:#FF9800;color:white;border:none;border-radius:4px;cursor:pointer;display:none;">
+                                Debug Video
+                            </button>
+                            <div id="handStatus" style="margin-top:5px;font-size:11px;color:#aaa;">
+                                Solo disponible en modo libre
+                            </div>
+                        </div>
+                    </div>
+                </li>
+            </ul>
+        </div>
+        <img id="tiles" src="tiles.jpg">
+        <img id="xneg" src="xneg.jpg">
+        <img id="xpos" src="xpos.jpg">
+        <img id="ypos" src="ypos.jpg">
+        <img id="zneg" src="zneg.jpg">
+        <img id="zpos" src="zpos.jpg">
+    </body>
+    <footer>
+        <small>credit <a href="https://madebyevan.com/webgl-water/">https://madebyevan.com/webgl-water/</a></small>
+    </footer>
+
+</html>
